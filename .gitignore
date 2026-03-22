@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment variables
+.env
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.opencode.json
+.python-version
+.ruff_cache/
+
+# uv
+uv.lock
