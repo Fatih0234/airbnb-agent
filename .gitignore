@@ -22,3 +22,10 @@ wheels/
 
 # uv
 uv.lock
+
+# Generated output
+output/
+
+# Debug / scratch scripts
+debug_*.py
+test_*.py

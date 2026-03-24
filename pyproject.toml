@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
-    "pydantic-ai-slim[mcp,openrouter]>=1.70.0",
+    "pydantic-ai-slim[mcp,anthropic]>=1.70.0",
     "python-dotenv>=1.2.2",
+    "tenacity>=9.0.0",
 ]
