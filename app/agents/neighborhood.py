@@ -1,20 +1,22 @@
 from pydantic_ai import Agent
+from pydantic_ai.usage import UsageLimits
 import anthropic
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
+from ..search_agent import run_search_backed_agent
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
-from ..mcp_client import create_brave_mcp_server
+from ..mcp_client import create_tavily_mcp_server
 from ..schemas import IntakeOutput, NeighborhoodOutput
 
 SYSTEM_PROMPT = """You are a neighborhood research agent. Your job is to give an honest,
 well-sourced summary of the destination's neighborhood character.
 
 Instructions:
-- Use brave_llm_context_search to research the destination's safety reputation, overall vibe,
-  and walkability. Search for things like "{destination} neighborhood safety", "{destination}
-  best areas to stay", "{destination} walkability".
-- Use brave_web_search as a fallback or for supplementary context.
+- Make at most 3 Tavily searches total for the entire run.
+- Use only tavily-search for this task. Do not use tavily-extract.
+- Use 1 search for safety, 1 for best business/relevant stay areas, and 1 for walkability.
+- Do not loop, broaden the search repeatedly, or run extra follow-up searches after those 3.
 - Never make claims without finding supporting search results.
 - Summarize into: safety (honest, not alarmist), vibe (character, atmosphere, who goes there),
   walkability, and any notable notes the traveler should know.
@@ -39,10 +41,15 @@ async def run_neighborhood(intake: IntakeOutput) -> NeighborhoodOutput:
     )
     agent = Agent(
         model,
-        toolsets=[create_brave_mcp_server()],
+        toolsets=[create_tavily_mcp_server()],
         output_type=NeighborhoodOutput,
         system_prompt=SYSTEM_PROMPT,
+        max_concurrency=1,
     )
     async with agent:
-        result = await agent.run(_build_prompt(intake))
+        result = await run_search_backed_agent(
+            agent,
+            _build_prompt(intake),
+            usage_limits=UsageLimits(request_limit=5),
+        )
     return result.output

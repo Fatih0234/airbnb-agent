@@ -38,9 +38,10 @@ A single self-contained HTML file saved to disk. Sections:
 - Stay options (5 best matches with images, price, key details, link)
 - Neighborhood brief (safety, vibe, character)
 - Weather & packing (forecast for travel dates)
-- Activities (curated to how the user wants to spend time)
-- Food picks (restaurants, cafes, local cuisine)
+- Activities (curated to how the user wants to spend time, with outbound source links)
+- Food picks (restaurants, cafes, local cuisine, with outbound source links)
 - Commute & logistics (transit times to target destinations, map)
+- Flights when the user provides an origin airport
 
 ## What makes this different
 

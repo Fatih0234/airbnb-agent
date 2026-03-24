@@ -2,7 +2,9 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+import traceback
 
 from pydantic_ai.exceptions import UsageLimitExceeded
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -15,6 +17,13 @@ from .agents.food import run_food
 from .agents.neighborhood import run_neighborhood
 from .agents.stays import run_stays
 from .agents.weather import run_weather
+from .content_enrichment import (
+    enrich_activities_output,
+    enrich_food_output,
+    normalize_activities_output,
+    normalize_food_output,
+)
+from .search_agent import is_transient_search_error
 from .schemas import (
     ActivitiesOutput,
     CommuteOutput,
@@ -30,6 +39,7 @@ from .schemas import (
 log = logging.getLogger("pipeline")
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
+DEBUG_DIR = OUTPUT_DIR / "debug"
 
 _AGENT_NAMES = ["stays", "neighborhood", "activities", "food", "weather", "commute"]
 _AGENT_NAMES_WITH_FLIGHTS = _AGENT_NAMES + ["flights"]
@@ -58,7 +68,9 @@ def _retried(fn):
     return retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=1, max=10),
-        retry=retry_if_exception(lambda e: not isinstance(e, UsageLimitExceeded)),
+        retry=retry_if_exception(
+            lambda e: not isinstance(e, UsageLimitExceeded) and not is_transient_search_error(e)
+        ),
         reraise=True,
     )(fn)
 
@@ -144,6 +156,28 @@ _FALLBACKS = [
 ]
 
 
+def _write_failure_debug_artifact(agent_name: str, exc: Exception, intake: IntakeOutput) -> Path:
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = DEBUG_DIR / f"{timestamp}_{agent_name}_failure.log"
+    trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    details = [
+        f"agent={agent_name}",
+        f"exception_type={type(exc).__name__}",
+        "",
+        "message:",
+        str(exc),
+        "",
+        "intake:",
+        intake.model_dump_json(indent=2),
+        "",
+        "traceback:",
+        trace,
+    ]
+    path.write_text("\n".join(details), encoding="utf-8")
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
@@ -174,7 +208,9 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
     resolved = []
     for name, result, fallback in zip(agent_names, raw, fallbacks):
         if isinstance(result, Exception):
-            log.warning("Agent '%s' failed: %s", name, type(result).__name__)
+            artifact_path = _write_failure_debug_artifact(name, result, intake)
+            log.warning("Agent '%s' failed: %s", name, result)
+            log.warning("Saved failure debug artifact: %s", artifact_path)
             summary.failed.append(name)
             resolved.append(fallback())
         else:
@@ -184,6 +220,13 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
 
     stays, neighborhood, activities, food, weather, commute = resolved[:6]
     flights: FlightsOutput | None = resolved[6] if include_flights else None
+
+    activities = normalize_activities_output(activities)
+    food = normalize_food_output(food)
+    activities, food = await asyncio.gather(
+        enrich_activities_output(activities),
+        enrich_food_output(food),
+    )
 
     if summary.is_degraded:
         log.warning(
@@ -202,7 +245,17 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
     )(run_curation)
 
     try:
-        output = await _run_curation_retried(intake, stays, neighborhood, weather, activities, food, commute, flights)
+        output = await _run_curation_retried(
+            intake,
+            stays,
+            neighborhood,
+            weather,
+            activities,
+            food,
+            commute,
+            flights,
+            summary.failed,
+        )
         log.info("Curation OK")
     except Exception as exc:
         log.error("Curation failed: %s", type(exc).__name__)

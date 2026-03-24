@@ -1,0 +1,14 @@
+{
+  "destination": "Denver, Colorado, USA",
+  "trip_type": "business",
+  "check_in": "2026-10-06",
+  "check_out": "2026-10-10",
+  "guests": 1,
+  "budget_per_night": 235,
+  "target_destinations": [
+    "Colorado Convention Center, 700 14th St, Denver, CO 80202",
+    "WeWork Tabor Center, 1200 17th St, Denver, CO 80202"
+  ],
+  "time_preferences": "Conference during the day, efficient downtown commute, good coffee between meetings, one strong steak or Mexican dinner, a low-effort live music option, and one mountain-view sunset if timing works.",
+  "origin_airport": "ORD"
+}

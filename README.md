@@ -1,26 +1,56 @@
 # LiveAudio Airbnb Assistant
 
-A terminal-based AI travel assistant that collects a few trip inputs, runs parallel research agents, and produces both structured JSON and a styled self-contained HTML travel brief.
+A terminal-first travel research pipeline that collects one trip brief, runs specialized research agents, and outputs:
+
+- structured JSON
+- a self-contained HTML travel book
+- direct links for actionable recommendations
 
 The current pipeline covers:
-- Airbnb stays
-- Neighborhood summary
-- Weather
-- Activities
-- Food picks
-- Commute planning
-- Flights, using direct `fast-flights` integration with local Playwright
+
+- Airbnb stays with deterministic image scraping
+- neighborhood summary
+- weather and packing guidance
+- activities with `source_url` and best-effort metadata image enrichment
+- food picks with `source_url` and best-effort metadata image enrichment
+- commute planning
+- optional flights via direct `fast-flights` + local Playwright
+
+## How It Works
+
+Input can come from:
+
+- interactive terminal prompts
+- a saved JSON scenario file
+
+The pipeline then:
+
+1. validates intake into `IntakeOutput`
+2. runs research agents for stays, neighborhood, activities, food, weather, commute, and optional flights
+3. normalizes and enriches activity/food source links and images
+4. curates the final `CurationOutput`
+5. saves JSON and renders a deterministic HTML travel book
+
+Notes:
+
+- Flights are optional and run only when `origin_airport` is provided.
+- Commute is meaningful when `target_destinations` are present.
+- Activity and food cards now expose `source_url` so users can click through in both JSON and HTML.
+- Partial failures degrade gracefully and write debug artifacts to `output/debug/`.
 
 ## Prerequisites
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) with MCP Toolkit enabled
-- A MiniMax API key
-- A Brave Search API key
-- A Google Maps API key
+- `MINIMAX_API_KEY`
+- `TAVILY_API_KEY`
+- `GOOGLE_MAPS_API_KEY`
 
-Docker MCP is still used for Airbnb, Brave Search, and OpenWeather. Flights no longer use Docker MCP.
+Runtime integrations:
+
+- MCP: Airbnb, Tavily, OpenWeather, Google Maps
+- Direct Python tooling: `fast-flights[local]` + Playwright
 
 ## Setup
 
@@ -30,8 +60,9 @@ cp .env.example .env
 ```
 
 Fill in `.env` with at least:
+
 - `MINIMAX_API_KEY`
-- `BRAVE_API_KEY`
+- `TAVILY_API_KEY`
 - `GOOGLE_MAPS_API_KEY`
 
 Install the local browser runtime used by flight search:
@@ -42,11 +73,43 @@ uv run python -m playwright install chromium
 
 ## Run
 
+Interactive:
+
 ```bash
 uv run python main.py
 ```
 
-The app writes JSON and HTML outputs to `output/`.
+From a saved scenario:
+
+```bash
+uv run python main.py --input docs/scenarios/lisbon_workcation_roundtrip.json
+```
+
+Outputs are written to `output/`:
+
+- `*.json` travel brief
+- `*.html` travel book
+- `output/debug/*.log` for failed agent runs
+
+## Scenario Fixtures
+
+The repo includes reusable end-to-end scenario files:
+
+- `docs/scenarios/lisbon_workcation_roundtrip.json`
+- `docs/scenarios/barcelona_business_roundtrip.json`
+- `docs/scenarios/istanbul_workcation_roundtrip.json`
+- `docs/scenarios/denver_business_roundtrip.json`
+- `docs/scenarios/sydney_workcation_roundtrip.json`
+
+These are intended for repeatable regression runs without re-entering intake prompts.
+
+## Useful Docs
+
+- `docs/SCENARIO_RUNBOOK.md` — how to run and interpret scenario tests
+- `docs/DOCS.md` — maintainer doc map and external references
+- `docs/REQUIREMENTS.md` — current runtime expectations and constraints
+- `docs/TAVILY_WORKFLOW.md` — how Tavily is used at runtime vs maintainer workflows
+- `scripts/debug_agent.py` — run one research agent in isolation against a scenario file
 
 ## Stack
 
@@ -56,5 +119,6 @@ The app writes JSON and HTML outputs to `output/`.
 | Package manager | uv |
 | Agent framework | PydanticAI |
 | Model provider | MiniMax M2.7 via Anthropic-compatible API |
-| MCP-backed tools | Airbnb, Brave Search, OpenWeather, Google Maps |
+| MCP-backed tools | Airbnb, Tavily, OpenWeather, Google Maps |
 | Direct Python flight search | `fast-flights[local]` + Playwright |
+| HTML generation | Deterministic Python renderer |

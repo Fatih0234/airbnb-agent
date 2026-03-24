@@ -1,5 +1,7 @@
 import asyncio
 from datetime import date
+import json
+from pathlib import Path
 
 from .schemas import IntakeOutput, TripType
 
@@ -131,3 +133,18 @@ async def collect_intake() -> IntakeOutput:
         time_preferences=time_preferences,
         origin_airport=origin_airport,
     )
+
+
+def load_intake_file(path: str | Path) -> IntakeOutput:
+    file_path = Path(path)
+    try:
+        raw = json.loads(file_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Input file not found: {file_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid JSON in input file {file_path}: {exc}") from exc
+
+    try:
+        return IntakeOutput.model_validate(raw)
+    except Exception as exc:
+        raise SystemExit(f"Input file validation failed for {file_path}: {exc}") from exc

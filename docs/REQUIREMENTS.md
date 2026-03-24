@@ -1,87 +1,73 @@
-# REQUIREMENTS — Build Phases
+# REQUIREMENTS — Current Runtime Contract
 
-## Phase 0 — Completed ✓
-Single conversational agent connected to Airbnb MCP. Terminal loop, message history, basic stay search and listing details. Proved the model/tool loop works.
+This file describes what the repo is expected to do now. It replaces the older phased build checklist as the source of truth for maintainers.
 
----
+## Functional Requirements
 
-## Phase 1 — Foundation & MCP Expansion
+The app must:
 
-Goal: Extend the tool stack and add retry infrastructure before touching the agent logic.
+1. accept trip intake from terminal prompts or `--input <scenario.json>`
+2. validate the payload into `IntakeOutput`
+3. run research for:
+   - stays
+   - neighborhood
+   - activities
+   - food
+   - weather
+   - commute
+   - flights when `origin_airport` is provided
+4. save a structured JSON brief
+5. generate a self-contained HTML travel book
+6. open the HTML output in the browser when generation succeeds
 
-Steps:
-1. Add `openweather` MCP server to `mcp_client.py`
-2. Add `mcp-google-map` (npx-based) MCP server to `mcp_client.py`
-3. Add `tenacity` to dependencies for retry logic on tool calls and agent runs
-4. Define Pydantic output schemas for each sub-agent (typed structured data)
-5. Verify all four MCP servers start and expose their tools correctly
+## Output Contract
 
-Schemas to define:
-- `IntakeOutput` — all user inputs structured (destination, dates, trip type, budget, guests, target destinations, time preferences)
-- `StaysOutput` — list of up to 5 stay candidates with images, price, link, key amenities
-- `NeighborhoodOutput` — safety summary, vibe, walkability notes
-- `ActivitiesOutput` — curated activity list with images, descriptions
-- `FoodOutput` — restaurant/cafe list with images, cuisine type, price range
-- `WeatherOutput` — forecast for travel dates, packing recommendation
-- `CommuteOutput` — transit options and times to user's target destinations, map URL
-- `CurationOutput` — final assembled content ready for slide generation (all sections + image URLs)
+### Core sections
 
----
+- stays: up to 5 Airbnb options
+- neighborhood: safety, vibe, walkability, notable notes
+- activities: curated list matched to `time_preferences`
+- food: curated list matched to trip type and preferences
+- weather: summary, temperature range, conditions, packing tips
+- commute: route options and optional map
+- flights: optional, omitted on failure or when not requested
 
-## Phase 2 — Agent Pipeline
+### Link and image expectations
 
-Goal: Rebuild from single chat agent to orchestrated multi-agent pipeline.
+- stay cards keep the Airbnb listing URL and deterministic stay-image scraping
+- activity and food items expose `source_url`
+- activity and food images are best-effort, populated via deterministic metadata scraping from `source_url`
+- HTML must surface actionable outbound links for activity and food cards when `source_url` exists
 
-Steps:
-1. Build Intake Agent — terminal prompts collecting all `IntakeOutput` fields
-2. Build research sub-agents (each uses assigned model + MCP tools, returns typed schema):
-   - Stays Agent → Airbnb MCP → `StaysOutput`
-   - Neighborhood Agent → Brave (llm_context + web search) → `NeighborhoodOutput`
-   - Activities Agent → Brave (local + web) + Maps (explore_area) → `ActivitiesOutput`
-   - Food Agent → Brave (local) + Maps (search_nearby) → `FoodOutput`
-   - Weather Agent → OpenWeather MCP → `WeatherOutput`
-   - Commute Agent → Maps (directions transit, distance_matrix) → `CommuteOutput`
-3. Build Orchestrator — wires all sub-agents as tools via agent-as-tool pattern, dispatches in parallel where possible
-4. Build Curation Agent — takes all sub-agent outputs, produces `CurationOutput` with all sections and image URLs
-5. Add tenacity retry wrappers on each agent run
-6. Add trace logging (tool calls, agent decisions, timing)
+## Reliability Requirements
 
-Model assignment:
-- Research agents: `stepfun/step-3.5-flash:free`
-- Curation + Orchestrator: `minimax/minimax-m2.7`
+- partial agent failure must not abort the whole run if curation can still proceed
+- failed agents must produce fallback empty outputs rather than guessed content
+- failed agent runs must write debug logs to `output/debug/`
+- retry behavior must avoid retrying obvious usage-limit failures
+- search-backed agent execution must remain serialized enough to reduce rate-limit churn
 
----
+## Regression Scenarios
 
-## Phase 3 — Output Generation
+The repo should keep working against saved scenario fixtures in `docs/scenarios/`, including:
 
-Goal: Turn curation output into the HTML travel book.
+- Lisbon
+- Barcelona
+- Istanbul
+- Denver
+- Sydney
 
-Steps:
-1. Wire `/frontend-slides` skill as the final pipeline stage
-2. Feed `CurationOutput` into the skill with destination vibe metadata
-3. Save HTML output to disk (e.g. `output/{destination}_{dates}.html`)
-4. Open in browser automatically after generation (optional convenience)
-5. Test full pipeline end-to-end with a real trip query
+Scenario runs should be suitable for:
 
----
+- single end-to-end validation
+- isolated agent debugging
+- concurrent stress testing
 
-## Phase 4 — Quality & Iteration (future)
+## Known Constraints
 
-Not yet scoped. Potential directions:
-- Richer slide styling per trip type / destination vibe
-- User confirmation step before slide generation
-- Multiple output formats (PDF export from HTML)
-- Web UI intake form (replaces terminal)
-- Caching research results for repeat queries to same destination
-- Adding more trip types
-- Support for multi-city / multi-leg trips
-
----
-
-## Constraints (all phases)
-
-- Terminal only, no web UI
-- No database
-- Local execution, no deployment
-- All facts must come from tool calls — no hallucination
-- Partial tool failures handled with retries, graceful degradation if retries exhausted
+- terminal only
+- no database
+- local execution only
+- facts must come from tools or deterministic post-processing
+- some third-party source pages will block scraping with `403` or return `404`; this should reduce image coverage only, not fail the run
+- concurrent runs may cause flight search or search-backed stages to hit request limits

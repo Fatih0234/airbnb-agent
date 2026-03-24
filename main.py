@@ -1,11 +1,13 @@
 import asyncio
+import argparse
 import logging
 import os
 import re
 import webbrowser
+from pathlib import Path
 
 from app.agents.slides import generate_slides
-from app.intake import collect_intake
+from app.intake import collect_intake, load_intake_file
 from app.pipeline import run_pipeline, save_html, save_output
 
 
@@ -54,7 +56,7 @@ def _setup_logging() -> None:
     redactor = _RedactingFilter()
     redactor.add_secret(os.getenv("GOOGLE_MAPS_API_KEY"))
     redactor.add_secret(os.getenv("MINIMAX_API_KEY"))
-    redactor.add_secret(os.getenv("BRAVE_API_KEY"))
+    redactor.add_secret(os.getenv("TAVILY_API_KEY"))
 
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
@@ -65,16 +67,34 @@ def _setup_logging() -> None:
     logging.root.addHandler(handler)
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the trip planning pipeline from interactive prompts or a JSON intake file."
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        help="Path to a JSON file containing IntakeOutput fields.",
+    )
+    return parser.parse_args()
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 async def main():
-    intake = await collect_intake()
+    args = _parse_args()
+    if args.input:
+        intake = load_intake_file(args.input)
+        print(f"Loaded trip intake from {args.input}")
+    else:
+        intake = await collect_intake()
 
     print("Researching your trip... this may take a minute.\n")
 
     result, summary = await run_pipeline(intake)
+    print("Saving JSON travel brief...")
     path = save_output(result)
 
     # HTML travel book

@@ -4,13 +4,14 @@ import anthropic
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
+from ..search_agent import run_search_backed_agent
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
 from ..flight_search import (
     search_airports,
     search_round_trip_flights,
     search_round_trip_flights_flexible,
 )
-from ..mcp_client import create_brave_mcp_server
+from ..mcp_client import create_tavily_mcp_server
 from ..schemas import FlightsOutput, IntakeOutput
 
 SYSTEM_PROMPT = """You are a flight research agent. Your job is to find 3–5 best-value flight
@@ -18,10 +19,12 @@ options for the user's trip.
 
 Instructions:
 - The user may have provided a city name or IATA code as their origin. If it looks like a city
-  name (not a 3-letter IATA code), use brave_web_search to look up the main IATA airport code
+  name (not a 3-letter IATA code), use tavily-search to look up the main IATA airport code
   for that city first (e.g. search "Istanbul main airport IATA code").
 - Similarly, if the destination looks like a city name, look up its primary IATA airport code.
-- You can use search_airports to confirm airport names or codes after a web search.
+- You can use search_airports to confirm airport names or codes after a Tavily search.
+- Use tavily-search only for airport-code lookups. Do not use tavily-extract.
+- Do not use more than 2 Tavily searches total for airport-code lookups.
 - Once you have IATA codes, call search_round_trip_flights for economy.
 - Also call search_round_trip_flights for business if it is likely to exist.
 - If the exact-date search returns no useful options, call search_round_trip_flights_flexible
@@ -29,7 +32,8 @@ Instructions:
 - Select the 3–5 most compelling options: prioritise best value (price vs. stops vs. duration).
   Include at least 1 non-stop or 1-stop economy option and 1 business/premium option if available.
 - Never invent flight data. Only report what the tool returns.
-- Do not call more than 4 flight-search tools total.
+- Do not call more than 4 flight-search tools total, and do not loop or repeat airport searches once
+  you have a plausible IATA code.
 - Populate cheapest_price_usd with the lowest price among the final options you return.
 - Write a concise search_summary (e.g. "6 options found; cheapest non-stop economy $320 on Turkish Airlines").
 - The search_summary may mention the wider search set, but any explicit prices you call out should match
@@ -62,12 +66,17 @@ async def run_flights(intake: IntakeOutput) -> FlightsOutput:
     )
     agent = Agent(
         model,
-        toolsets=[create_brave_mcp_server(), flight_toolset],
+        toolsets=[create_tavily_mcp_server(), flight_toolset],
         output_type=FlightsOutput,
         system_prompt=SYSTEM_PROMPT,
+        max_concurrency=1,
     )
     async with agent:
-        result = await agent.run(_build_prompt(intake), usage_limits=UsageLimits(request_limit=8))
+        result = await run_search_backed_agent(
+            agent,
+            _build_prompt(intake),
+            usage_limits=UsageLimits(request_limit=4),
+        )
     output = result.output
     if output.options:
         output.cheapest_price_usd = min(option.price_usd for option in output.options)

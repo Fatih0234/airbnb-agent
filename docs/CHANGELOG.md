@@ -1,5 +1,22 @@
 # Changelog
 
+## Done — Session 2026-03-24 (Source links, enrichment, scenarios)
+
+- Added `source_url` to activities and food outputs so recommendations are directly linkable in JSON and HTML
+- Added deterministic activity/food image enrichment from source-page metadata (`og:image`, `twitter:image`, JSON-LD, `image_src`)
+- Updated HTML cards to show source hostname and outbound `Visit link` CTA for activities and food
+- Added reusable Istanbul, Denver, and Sydney full-pipeline scenario fixtures
+- Validated concurrent end-to-end runs across Istanbul, Denver, and Sydney
+- Observed one concurrent-flight degradation case in Istanbul and one recoverable Google Maps commute error in Sydney
+
+## Done — Session 2026-03-24 (Tavily migration)
+
+- Replaced Brave MCP with Tavily MCP for runtime web research in `neighborhood`, `activities`, `food`, and flight airport-code lookup
+- Switched env/config from `BRAVE_API_KEY` to `TAVILY_API_KEY`
+- Added provider-neutral serialized search retries instead of Brave-specific retry logic
+- Kept Tavily Agent Skills as an optional maintainer workflow only; they are documented but not used by the Python runtime
+- Preserved deterministic curation and deterministic HTML rendering
+
 ## What this project does
 
 **Airbnb Stay-Matching Copilot** is a terminal-based AI travel planning assistant. Given a destination, dates, trip type, and preferences, it runs a parallel multi-agent research pipeline and produces a fully styled, self-contained HTML travel brief.
@@ -74,7 +91,7 @@ A complete run outputs:
 | `MiniMax-M2.7` | MiniMax Anthropic API | Research | stays, neighborhood, weather, activities, food, commute, flights |
 | `MiniMax-M2.7` | MiniMax Anthropic API | Synthesis + HTML | curation, slides |
 
-Env vars: `MINIMAX_API_KEY`, `MODEL_NAME`, `FAST_MODEL_NAME`, `GOOGLE_MAPS_API_KEY`, `BRAVE_API_KEY`
+Env vars: `MINIMAX_API_KEY`, `MODEL_NAME`, `FAST_MODEL_NAME`, `GOOGLE_MAPS_API_KEY`, `TAVILY_API_KEY`
 
 ---
 
@@ -83,7 +100,7 @@ Env vars: `MINIMAX_API_KEY`, `MODEL_NAME`, `FAST_MODEL_NAME`, `GOOGLE_MAPS_API_K
 - **Runtime:** Python 3.13, uv
 - **Agent framework:** pydantic-ai-slim (MCP + Anthropic extras)
 - **LLM:** MiniMax M2.7 via Anthropic-compatible API
-- **MCP servers:** Airbnb (Docker), Brave Search (Docker), OpenWeather (Docker), Google Maps (npx)
+- **MCP servers:** Airbnb (Docker), Tavily (npx), OpenWeather (Docker), Google Maps (npx)
 - **Direct flight search:** `fast-flights[local]` + Playwright
 - **Retry:** tenacity (exponential backoff, no retry on UsageLimitExceeded)
 - **Output:** JSON + self-contained HTML to `output/`

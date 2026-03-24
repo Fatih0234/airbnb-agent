@@ -1,0 +1,14 @@
+{
+  "destination": "Lisbon, Portugal",
+  "trip_type": "workcation",
+  "check_in": "2026-05-18",
+  "check_out": "2026-05-24",
+  "guests": 1,
+  "budget_per_night": 220,
+  "target_destinations": [
+    "Unicorn Factory Lisboa, Rua da Junqueira 94, Lisbon",
+    "Outsite Lisbon - Cais do Sodre, Rua de Sao Paulo 80, Lisbon"
+  ],
+  "time_preferences": "Work during the day from cafes or coworking spaces, then explore great seafood, scenic walking neighborhoods, a bit of nightlife, and one memorable sunset viewpoint.",
+  "origin_airport": "Berlin"
+}

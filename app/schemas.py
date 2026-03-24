@@ -68,6 +68,7 @@ class ActivityItem(BaseModel):
     name: str
     description: str
     image_url: str | None
+    source_url: str | None = None
     category: str  # e.g. "outdoor", "cultural", "nightlife", "sports"
 
 
@@ -85,6 +86,7 @@ class FoodItem(BaseModel):
     price_range: str  # e.g. "$", "$$", "$$$"
     description: str
     image_url: str | None
+    source_url: str | None = None
 
 
 class FoodOutput(BaseModel):
@@ -148,11 +150,11 @@ class CurationOutput(BaseModel):
     trip_type: TripType
     dates: str  # human-readable, e.g. "June 10–17, 2026"
     guests: int
-    stays: StaysOutput
-    neighborhood: NeighborhoodOutput
-    weather: WeatherOutput
-    activities: ActivitiesOutput
-    food: FoodOutput
-    commute: CommuteOutput
+    stays: StaysOutput | None = None
+    neighborhood: NeighborhoodOutput | None = None
+    weather: WeatherOutput | None = None
+    activities: ActivitiesOutput | None = None
+    food: FoodOutput | None = None
+    commute: CommuteOutput | None = None
     flights: FlightsOutput | None = None
     destination_vibe: str  # descriptor for slide theming, e.g. "coastal", "urban", "mountain"

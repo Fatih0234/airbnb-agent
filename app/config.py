@@ -32,3 +32,20 @@ def get_google_maps_api_key() -> str:
             "Missing GOOGLE_MAPS_API_KEY. Copy .env.example to .env and add your key."
         )
     return key
+
+
+def get_tavily_api_key() -> str:
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        raise SystemExit(
+            "Missing TAVILY_API_KEY. Copy .env.example to .env and add your key."
+        )
+    return key
+
+
+def get_curation_timeout_seconds() -> float:
+    return float(os.getenv("CURATION_TIMEOUT_SECONDS", "180"))
+
+
+def get_slides_timeout_seconds() -> float:
+    return float(os.getenv("SLIDES_TIMEOUT_SECONDS", "240"))
