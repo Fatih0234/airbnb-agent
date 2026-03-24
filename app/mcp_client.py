@@ -29,11 +29,3 @@ def create_google_maps_mcp_server() -> MCPServerStdio:
         args=["@cablate/mcp-google-map", "--stdio"],
         timeout=30,
     )
-
-
-def create_google_flights_mcp_server() -> MCPServerStdio:
-    return MCPServerStdio(
-        "docker",
-        args=["run", "-i", "--rm", "mcp/google-flights"],
-        timeout=30,
-    )

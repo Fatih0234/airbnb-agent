@@ -17,9 +17,9 @@ Use these as the main implementation docs:
 - Agent docs: https://ai.pydantic.dev/agents/
 - Dependencies: https://ai.pydantic.dev/dependencies/
 - Tools: https://ai.pydantic.dev/tools/
+- Toolsets: https://ai.pydantic.dev/toolsets/
 - Built-in tools: https://ai.pydantic.dev/builtin-tools/
 - MCP overview: https://ai.pydantic.dev/mcp/overview/
-- OpenRouter model docs: https://ai.pydantic.dev/models/openrouter/
 - Output and structured output: https://ai.pydantic.dev/output/
 - Messages and history: https://ai.pydantic.dev/message-history/
 - **Multi-agent applications: https://ai.pydantic.dev/multi-agent-applications/** ← new, required for Phase 2
@@ -71,6 +71,14 @@ Models in use:
 - Used by: Weather Agent
 - Returns: forecast for travel dates, conditions, seasonal context
 
+### fast-flights
+- Repo: https://github.com/AWeirdDev/flights
+- Docs: https://aweirddev.github.io/flights/
+- Local Playwright mode: https://aweirddev.github.io/flights/local.html
+- Used by: Flights Agent
+- Integration style: direct Python tools via `FunctionToolset`, not MCP
+- Current fetch mode: `fetch_mode="local"` to avoid consent-page failures from the old Docker wrapper
+
 ### Tenacity (retry library)
 - Docs: https://tenacity.readthedocs.io/en/latest/
 - Use for: wrapping agent runs and tool calls with retry + backoff logic
@@ -114,6 +122,7 @@ Models in use:
 - How to run multiple sub-agents in parallel
 - How to configure different models per agent in PydanticAI
 - Structured output from agents (`output_type` parameter)
+- FunctionToolset patterns for direct Python tools alongside MCP toolsets
 
 ### Phase 3 — Output generation
 - frontend-slides skill input format
@@ -125,6 +134,7 @@ Models in use:
 - Dependency injection docs
 - Airbnb MCP issues if results are inconsistent
 - Google Maps MCP GitHub issues
+- `fast-flights` docs and local Playwright behavior if flight search regresses
 
 ---
 
@@ -133,10 +143,10 @@ Models in use:
 1. `REQUIREMENTS.md`
 2. `PRD.md`
 3. PydanticAI multi-agent docs
-4. PydanticAI MCP overview
+4. PydanticAI toolsets docs
 5. PydanticAI agent docs
 6. PydanticAI output/structured output docs
-7. Relevant MCP server repo (Airbnb, Brave, Google Maps, OpenWeather)
+7. Relevant tool repo (Airbnb, Brave, Google Maps, OpenWeather, fast-flights)
 8. tenacity docs
 9. uv docs
 10. MCP spec

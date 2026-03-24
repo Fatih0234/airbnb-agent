@@ -11,12 +11,12 @@ A complete run outputs:
 - **6–10 activities** matched to the user's stated preferences
 - **6–8 restaurant picks** with cuisine, price range, and descriptions
 - **Commute options** (transit) to any target destinations (business/event trips)
-- **Flight options** (if origin airport provided) via Google Flights MCP
+- **Flight options** (if origin airport provided) via direct `fast-flights` search with local Playwright
 - A **single-page HTML travel book** with sidebar navigation, images, and responsive layout
 
 ---
 
-## Done — Session 2025-03-24
+## Done — Session 2026-03-24
 
 ### Provider migration: OpenRouter → Google → MiniMax M2.7
 
@@ -51,12 +51,19 @@ A complete run outputs:
 - Full HTML now generates at ~29KB with all sections rendered
 
 **5. Flights agent integrated (by user)**
-- New `app/agents/flights.py`: uses Brave (IATA lookup) + Google Flights MCP
+- New `app/agents/flights.py`: uses Brave (IATA lookup) + Google Flights
 - `app/schemas.py`: added `FlightOption`, `FlightsOutput`, `origin_airport` to `IntakeOutput`, `flights` to `CurationOutput`
 - `app/intake.py`: added skippable "Where are you flying from?" prompt
-- `app/mcp_client.py`: added `create_google_flights_mcp_server()`
 - Pipeline: flights agent runs in parallel when origin airport is provided; omitted otherwise
 - Slides: conditional Flights section (table with airline/times/price)
+
+**6. Replaced Google Flights MCP with direct `fast-flights[local]` integration**
+- Root cause: the Docker `mcp/google-flights` image was receiving `consent.google.com` pages and parsing them as "no flights found"
+- Added `fast-flights[local]` dependency and installed Playwright-backed local Chromium support
+- New `app/flight_search.py`: exact-date and flexible date-window search helpers plus normalization and de-duplication
+- `app/agents/flights.py`: switched from Docker MCP to direct Python tools via `FunctionToolset`
+- `app/mcp_client.py`: removed the unused Google Flights Docker factory
+- Result: live IST → Tokyo searches now return real structured options under MiniMax M2.7
 
 ---
 
@@ -76,6 +83,7 @@ Env vars: `MINIMAX_API_KEY`, `MODEL_NAME`, `FAST_MODEL_NAME`, `GOOGLE_MAPS_API_K
 - **Runtime:** Python 3.13, uv
 - **Agent framework:** pydantic-ai-slim (MCP + Anthropic extras)
 - **LLM:** MiniMax M2.7 via Anthropic-compatible API
-- **MCP servers:** Airbnb (Docker), Brave Search (Docker), OpenWeather (Docker), Google Maps (npx), Google Flights (Docker)
+- **MCP servers:** Airbnb (Docker), Brave Search (Docker), OpenWeather (Docker), Google Maps (npx)
+- **Direct flight search:** `fast-flights[local]` + Playwright
 - **Retry:** tenacity (exponential backoff, no retry on UsageLimitExceeded)
 - **Output:** JSON + self-contained HTML to `output/`
