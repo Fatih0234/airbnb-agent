@@ -1,48 +1,59 @@
-from pydantic_ai import Agent
-from pydantic_ai.usage import UsageLimits
+import json
+
 import anthropic
+from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.usage import UsageLimits
 
-from ..search_agent import run_search_backed_agent
+from ..activity_search import MODEL_CANDIDATE_LIMIT, collect_activity_candidates
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
-from ..mcp_client import create_tavily_mcp_server
 from ..schemas import ActivitiesOutput, IntakeOutput
 
-SEARCH_REQUEST_LIMIT = 5
+MODEL_REQUEST_LIMIT = 3
 
-SYSTEM_PROMPT = """You are an activities research agent. Your job is to find activities
-that closely match how the user wants to spend their time.
+SYSTEM_PROMPT = """You are an activities ranking agent. Your job is to select the best activity
+options from a precomputed candidate list.
 
 Instructions:
-- Read the user's time_preferences carefully — these are the primary filter for what to find.
-- Make at most 2 tavily-search calls total for discovery.
-- Use tavily-search first to find strong candidates.
-- Prefer writing from strong search snippets and source metadata instead of calling tavily-extract.
-- Use tavily-extract on at most 1 high-value URL only if the best candidates still cannot be described
-  accurately from the search results alone.
-- After those calls, immediately compile and return the results — do not search further.
-- For each activity, include `source_url` whenever possible.
-- Prefer the venue's official page as `source_url`; if that is not discoverable, use the best evidence page
-  you actually found in search results.
-- Never invent a `source_url` or `image_url`.
-- Leave `image_url` null unless a trustworthy image URL is directly present in the tool results.
-- Curate a focused list (6–10 activities) matched to the user's preferences, not a generic top-10.
-- Categorize each activity (outdoor, cultural, nightlife, sports, food, sightseeing, etc.).
+- Use only the provided candidate activities. Do not search or invent additional options.
+- Curate a focused list of 6–10 activities matched to the user's brief, not a generic city top-10.
+- Never invent a `source_url` or `image_url`; preserve them only from provided candidates.
+- You may refine descriptions for clarity and assign the final category when needed.
+- Prefer a mix that reflects the trip brief rather than repeating the same type of pick.
 - Return a structured ActivitiesOutput.
 """
 
 
-def _build_prompt(intake: IntakeOutput) -> str:
+def _build_prompt(
+    intake: IntakeOutput,
+    *,
+    candidates: list[dict[str, object]],
+    search_metadata: dict[str, object],
+) -> str:
     return (
-        f"Find activities in {intake.destination} matched to these preferences: "
-        f'"{intake.time_preferences}". '
-        f"Trip type: {intake.trip_type}. "
-        f"Dates: {intake.check_in} to {intake.check_out}, {intake.guests} guest(s)."
+        f"Rank the provided activity candidates for a trip to {intake.destination}.\n\n"
+        f"Trip context:\n"
+        f"- trip type: {intake.trip_type}\n"
+        f"- dates: {intake.check_in} to {intake.check_out}\n"
+        f"- guests: {intake.guests}\n"
+        f"- time preferences: {intake.time_preferences}\n\n"
+        f"Search metadata:\n{json.dumps(search_metadata, indent=2)}\n\n"
+        f"Candidate activities:\n{json.dumps(candidates, indent=2)}"
     )
 
 
 async def run_activities(intake: IntakeOutput) -> ActivitiesOutput:
+    candidates, search_metadata = await collect_activity_candidates(
+        destination=intake.destination,
+        trip_type=intake.trip_type,
+        time_preferences=intake.time_preferences,
+        limit=MODEL_CANDIDATE_LIMIT,
+    )
+
+    if not candidates:
+        return ActivitiesOutput(activities=[])
+
     model = AnthropicModel(
         get_fast_model_name(),
         provider=AnthropicProvider(anthropic_client=anthropic.AsyncAnthropic(
@@ -51,15 +62,20 @@ async def run_activities(intake: IntakeOutput) -> ActivitiesOutput:
     )
     agent = Agent(
         model,
-        toolsets=[create_tavily_mcp_server()],
         output_type=ActivitiesOutput,
         system_prompt=SYSTEM_PROMPT,
         max_concurrency=1,
     )
     async with agent:
-        result = await run_search_backed_agent(
-            agent,
-            _build_prompt(intake),
-            usage_limits=UsageLimits(request_limit=SEARCH_REQUEST_LIMIT),
+        result = await agent.run(
+            _build_prompt(
+                intake,
+                candidates=candidates,
+                search_metadata={
+                    **search_metadata,
+                    "candidate_count": len(candidates),
+                },
+            ),
+            usage_limits=UsageLimits(request_limit=MODEL_REQUEST_LIMIT),
         )
     return result.output
