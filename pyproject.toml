@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "fast-flights[local]>=2.2",
+    "geopy>=2.4.1",
     "httpx>=0.28.1",
     "pydantic-ai-slim[mcp,anthropic]>=1.70.0",
     "python-dotenv>=1.2.2",

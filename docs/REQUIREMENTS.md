@@ -14,26 +14,28 @@ The app must:
    - activities
    - food
    - weather
-   - commute
    - flights when `origin_airport` is provided
 4. save a structured JSON brief
-5. generate a self-contained HTML travel book
+5. generate a self-contained HTML travel book through the deterministic presentation system (`DeckSpec` builder, style preset selection, HTML renderer)
 6. open the HTML output in the browser when generation succeeds
 
 ## Output Contract
 
 ### Core sections
 
+- hero: destination, dates, thesis, key metrics
+- recommendation: best overall stay and tradeoff note
+- comparison: ranked stay shortlist
 - stays: up to 5 Airbnb options
 - neighborhood: safety, vibe, walkability, notable notes
 - activities: curated list matched to `time_preferences`
 - food: curated list matched to trip type and preferences
 - weather: summary, temperature range, conditions, packing tips
-- commute: route options and optional map
 - flights: optional, omitted on failure or when not requested
 
 ### Link and image expectations
 
+- stay candidates expose a stable `id` that survives ranking and rendering
 - stay cards keep the Airbnb listing URL and deterministic stay-image scraping
 - activity and food items expose `source_url`
 - activity and food images are best-effort, populated via deterministic metadata scraping from `source_url`

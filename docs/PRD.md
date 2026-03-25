@@ -6,17 +6,16 @@ A terminal-based agentic pipeline that takes a user's trip constraints and wishe
 
 ## The problem
 
-Planning a trip involves juggling many tabs and sources: Airbnb for stays, Google Maps for commute times, TripAdvisor for activities, weather forecasts, neighborhood safety research, restaurant hunting. This takes hours and the results are scattered. Most people settle for "good enough" because doing it thoroughly is tedious.
+Planning a trip involves juggling many tabs and sources: Airbnb for stays, activity research, weather forecasts, neighborhood safety research, restaurant hunting. This takes hours and the results are scattered. Most people settle for "good enough" because doing it thoroughly is tedious.
 
 ## The solution
 
-One pipeline that collects your constraints once, dispatches specialized agents to research in parallel, curates the best options, and assembles everything into a single travel book — stays, activities, food, weather, commute logistics, neighborhood brief — all sourced from real data, not hallucinated.
+One pipeline that collects your constraints once, dispatches specialized agents to research in parallel, curates the best options, and assembles everything into a single travel book — stays, activities, food, weather, neighborhood brief, and optional flights — all sourced from real data, not hallucinated.
 
 ## User type
 
 - Travelers (leisure and business) who value thoroughness over speed
 - People planning trips to unfamiliar cities who want local context they can trust
-- Business travelers who need to understand commute logistics before booking
 - People who are comfortable with a terminal during testing/early access
 
 ## Trip types supported
@@ -24,12 +23,12 @@ One pipeline that collects your constraints once, dispatches specialized agents 
 | Type | Primary focus |
 |---|---|
 | Vacation | Activities, food, atmosphere, neighborhood vibe |
-| Business | Commute to office/venue, transit options, practical logistics |
+| Business | Efficient stay choice, practical logistics, balanced evening options |
 | Workcation | Wifi quality, coworking nearby, leisure mix |
 | Weekend getaway | Short trip, convenience, proximity, high-density activities |
 | Family trip | Space, kid-friendly filters, nearby parks/attractions |
 | Romantic / honeymoon | Ambiance, couples activities, romantic dining |
-| Event-based | Proximity to venue as primary constraint, dates locked |
+| Event-based | Venue-first planning, dates locked, efficient stay shortlist |
 
 ## Output
 
@@ -40,7 +39,7 @@ A single self-contained HTML file saved to disk. Sections:
 - Weather & packing (forecast for travel dates)
 - Activities (curated to how the user wants to spend time, with outbound source links)
 - Food picks (restaurants, cafes, local cuisine, with outbound source links)
-- Commute & logistics (transit times to target destinations, map)
+- Stay map (Leaflet map of shortlisted Airbnb options)
 - Flights when the user provides an origin airport
 
 ## What makes this different
@@ -48,7 +47,7 @@ A single self-contained HTML file saved to disk. Sections:
 - Fully sourced — every claim comes from a tool call, nothing invented
 - Trip-type aware — research priorities shift based on why you're traveling
 - User-directed activities — not generic "top 10" lists, shaped by what the user tells us
-- Rich output — images, maps, links, all in one file
+- Rich output — images, stay map, links, all in one file
 
 ## Current status
 

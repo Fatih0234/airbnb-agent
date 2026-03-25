@@ -54,7 +54,6 @@ class _SuppressOAuthNoise(logging.Filter):
 
 def _setup_logging() -> None:
     redactor = _RedactingFilter()
-    redactor.add_secret(os.getenv("GOOGLE_MAPS_API_KEY"))
     redactor.add_secret(os.getenv("MINIMAX_API_KEY"))
     redactor.add_secret(os.getenv("TAVILY_API_KEY"))
 

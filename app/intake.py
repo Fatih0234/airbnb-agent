@@ -25,9 +25,6 @@ TRIP_TYPE_LABELS = {
     "event_based": "Event-based (concert, conference, match...)",
 }
 
-COMMUTE_TRIP_TYPES = {"business", "workcation", "event_based"}
-
-
 def _ask(prompt: str) -> str:
     return input(prompt).strip()
 
@@ -97,16 +94,6 @@ async def collect_intake() -> IntakeOutput:
         "Budget per night in USD (press Enter to skip): "
     )
 
-    target_destinations: list[str] = []
-    if trip_type in COMMUTE_TRIP_TYPES:
-        print(
-            "\nCommute destinations — enter addresses/places you need to reach"
-            " (comma-separated, or press Enter to skip):"
-        )
-        raw = _ask("> ")
-        if raw:
-            target_destinations = [t.strip() for t in raw.split(",") if t.strip()]
-
     print(
         "\nHow do you want to spend your time there?"
         "\n(e.g. 'explore local food scene, some museums, outdoor activities')"
@@ -129,7 +116,6 @@ async def collect_intake() -> IntakeOutput:
         check_out=check_out,
         guests=guests,
         budget_per_night=budget,
-        target_destinations=target_destinations,
         time_preferences=time_preferences,
         origin_airport=origin_airport,
     )

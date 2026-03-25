@@ -10,7 +10,6 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from .agents.activities import run_activities
-from .agents.commute import run_commute
 from .agents.curation import run_curation
 from .agents.flights import run_flights
 from .agents.food import run_food
@@ -26,7 +25,6 @@ from .content_enrichment import (
 from .search_agent import is_transient_search_error
 from .schemas import (
     ActivitiesOutput,
-    CommuteOutput,
     CurationOutput,
     FlightsOutput,
     FoodOutput,
@@ -41,7 +39,7 @@ log = logging.getLogger("pipeline")
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 DEBUG_DIR = OUTPUT_DIR / "debug"
 
-_AGENT_NAMES = ["stays", "neighborhood", "activities", "food", "weather", "commute"]
+_AGENT_NAMES = ["stays", "neighborhood", "activities", "food", "weather"]
 _AGENT_NAMES_WITH_FLIGHTS = _AGENT_NAMES + ["flights"]
 
 
@@ -101,11 +99,6 @@ async def _run_weather(intake: IntakeOutput) -> WeatherOutput:
 
 
 @_retried
-async def _run_commute(intake: IntakeOutput) -> CommuteOutput:
-    return await run_commute(intake)
-
-
-@_retried
 async def _run_flights(intake: IntakeOutput) -> FlightsOutput:
     return await run_flights(intake)
 
@@ -138,10 +131,6 @@ def _fallback_weather() -> WeatherOutput:
     )
 
 
-def _fallback_commute() -> CommuteOutput:
-    return CommuteOutput(options=[], map_url=None)
-
-
 def _fallback_flights() -> FlightsOutput:
     return FlightsOutput(options=[], cheapest_price_usd=None, search_summary="")
 
@@ -152,7 +141,6 @@ _FALLBACKS = [
     _fallback_activities,
     _fallback_food,
     _fallback_weather,
-    _fallback_commute,
 ]
 
 
@@ -196,7 +184,6 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
         _run_activities(intake),
         _run_food(intake),
         _run_weather(intake),
-        _run_commute(intake),
     ]
     if include_flights:
         log.info("Flight search enabled (origin: %s)", intake.origin_airport)
@@ -218,8 +205,8 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
             summary.succeeded.append(name)
             resolved.append(result)
 
-    stays, neighborhood, activities, food, weather, commute = resolved[:6]
-    flights: FlightsOutput | None = resolved[6] if include_flights else None
+    stays, neighborhood, activities, food, weather = resolved[:5]
+    flights: FlightsOutput | None = resolved[5] if include_flights else None
 
     activities = normalize_activities_output(activities)
     food = normalize_food_output(food)
@@ -252,7 +239,6 @@ async def run_pipeline(intake: IntakeOutput) -> tuple[CurationOutput, RunSummary
             weather,
             activities,
             food,
-            commute,
             flights,
             summary.failed,
         )

@@ -14,17 +14,20 @@ from ..flight_search import (
 from ..mcp_client import create_tavily_mcp_server
 from ..schemas import FlightsOutput, IntakeOutput
 
+SEARCH_REQUEST_LIMIT = 4
+
 SYSTEM_PROMPT = """You are a flight research agent. Your job is to find 3–5 best-value flight
 options for the user's trip.
 
 Instructions:
-- The user may have provided a city name or IATA code as their origin. If it looks like a city
-  name (not a 3-letter IATA code), use tavily-search to look up the main IATA airport code
-  for that city first (e.g. search "Istanbul main airport IATA code").
-- Similarly, if the destination looks like a city name, look up its primary IATA airport code.
-- You can use search_airports to confirm airport names or codes after a Tavily search.
+- Call search_airports for the origin and destination first.
+- If search_airports returns a plausible exact or near-exact airport match, use that result and skip Tavily.
+- Only if search_airports does not produce a confident code should you use tavily-search to look up the main
+  IATA airport code for that city (for example, search "Istanbul main airport IATA code").
+- After a Tavily lookup, use search_airports once to confirm the airport name or code.
 - Use tavily-search only for airport-code lookups. Do not use tavily-extract.
-- Do not use more than 2 Tavily searches total for airport-code lookups.
+- Do not use more than 2 Tavily searches total for airport-code lookups, and use at most 1 Tavily search
+  per unresolved endpoint.
 - Once you have IATA codes, call search_round_trip_flights for economy.
 - Also call search_round_trip_flights for business if it is likely to exist.
 - If the exact-date search returns no useful options, call search_round_trip_flights_flexible
@@ -75,7 +78,7 @@ async def run_flights(intake: IntakeOutput) -> FlightsOutput:
         result = await run_search_backed_agent(
             agent,
             _build_prompt(intake),
-            usage_limits=UsageLimits(request_limit=4),
+            usage_limits=UsageLimits(request_limit=SEARCH_REQUEST_LIMIT),
         )
     output = result.output
     if output.options:

@@ -5,7 +5,6 @@ from datetime import date
 
 from ..schemas import (
     ActivitiesOutput,
-    CommuteOutput,
     CurationOutput,
     FlightsOutput,
     FoodOutput,
@@ -100,7 +99,6 @@ async def run_curation(
     weather: WeatherOutput,
     activities: ActivitiesOutput,
     food: FoodOutput,
-    commute: CommuteOutput,
     flights: FlightsOutput | None = None,
     failed_sections: list[str] | None = None,
 ) -> CurationOutput:
@@ -111,7 +109,6 @@ async def run_curation(
     curated_weather = None if "weather" in failed or not _has_weather_data(weather) else weather
     curated_activities = None if "activities" in failed or not activities.activities else activities
     curated_food = None if "food" in failed or not food.picks else food
-    curated_commute = None if "commute" in failed or (not commute.options and not commute.map_url) else commute
     curated_flights = None if "flights" in failed or flights is None or not flights.options else flights
 
     return CurationOutput(
@@ -124,7 +121,6 @@ async def run_curation(
         weather=curated_weather,
         activities=curated_activities,
         food=curated_food,
-        commute=curated_commute,
         flights=curated_flights,
         destination_vibe=_infer_destination_vibe(
             intake,

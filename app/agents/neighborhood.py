@@ -9,14 +9,16 @@ from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
 from ..mcp_client import create_tavily_mcp_server
 from ..schemas import IntakeOutput, NeighborhoodOutput
 
+SEARCH_REQUEST_LIMIT = 4
+
 SYSTEM_PROMPT = """You are a neighborhood research agent. Your job is to give an honest,
 well-sourced summary of the destination's neighborhood character.
 
 Instructions:
-- Make at most 3 Tavily searches total for the entire run.
+- Make at most 2 Tavily searches total for the entire run.
 - Use only tavily-search for this task. Do not use tavily-extract.
-- Use 1 search for safety, 1 for best business/relevant stay areas, and 1 for walkability.
-- Do not loop, broaden the search repeatedly, or run extra follow-up searches after those 3.
+- Use 1 search for safety plus area fit, and 1 search for walkability plus practical caveats.
+- Do not loop, broaden the search repeatedly, or run extra follow-up searches after those 2.
 - Never make claims without finding supporting search results.
 - Summarize into: safety (honest, not alarmist), vibe (character, atmosphere, who goes there),
   walkability, and any notable notes the traveler should know.
@@ -50,6 +52,6 @@ async def run_neighborhood(intake: IntakeOutput) -> NeighborhoodOutput:
         result = await run_search_backed_agent(
             agent,
             _build_prompt(intake),
-            usage_limits=UsageLimits(request_limit=5),
+            usage_limits=UsageLimits(request_limit=SEARCH_REQUEST_LIMIT),
         )
     return result.output

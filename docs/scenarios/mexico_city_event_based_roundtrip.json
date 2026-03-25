@@ -1,0 +1,10 @@
+{
+  "destination": "Mexico City, Mexico",
+  "trip_type": "event_based",
+  "check_in": "2026-09-03",
+  "check_out": "2026-09-07",
+  "guests": 2,
+  "budget_per_night": 230,
+  "time_preferences": "Long weekend built around a major Saturday night concert, so prioritize neighborhoods with easy, safe late-night returns plus great coffee, standout taco spots, one contemporary Mexican dinner, one art-heavy afternoon, and daytime plans that feel energizing without making the concert night exhausting.",
+  "origin_airport": "MIA"
+}

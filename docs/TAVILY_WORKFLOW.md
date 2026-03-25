@@ -18,14 +18,14 @@ npx -y tavily-mcp@latest
 The app passes:
 
 - `TAVILY_API_KEY`
-- `DEFAULT_PARAMETERS={"search_depth":"advanced","max_results":8,"include_images":false,"include_raw_content":false}`
+- `DEFAULT_PARAMETERS={"search_depth":"advanced","max_results":5,"include_images":false,"include_raw_content":false}`
 
 Current runtime usage:
 
 - `neighborhood` uses `tavily-search` only
-- `activities` uses `tavily-search` first and may use `tavily-extract` on a small number of URLs
-- `food` uses `tavily-search` first and may use `tavily-extract` on a small number of URLs
-- `flights` uses `tavily-search` only for airport-code lookup before direct `fast-flights` search
+- `activities` uses `tavily-search` first and should rely on snippets; `tavily-extract` is a rare fallback on at most one URL
+- `food` uses `tavily-search` first and should rely on snippets; `tavily-extract` is a rare fallback on at most one URL
+- `flights` prefers local `search_airports` first and uses `tavily-search` only as a fallback for unresolved airport-code lookup before direct `fast-flights` search
 
 ## Optional Tavily Agent Skills
 

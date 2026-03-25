@@ -29,3 +29,4 @@ output/
 # Debug / scratch scripts
 debug_*.py
 test_*.py
+!tests/test_presentation.py

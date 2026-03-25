@@ -13,7 +13,6 @@ The current pipeline covers:
 - weather and packing guidance
 - activities with `source_url` and best-effort metadata image enrichment
 - food picks with `source_url` and best-effort metadata image enrichment
-- commute planning
 - optional flights via direct `fast-flights` + local Playwright
 
 ## How It Works
@@ -26,15 +25,14 @@ Input can come from:
 The pipeline then:
 
 1. validates intake into `IntakeOutput`
-2. runs research agents for stays, neighborhood, activities, food, weather, commute, and optional flights
+2. runs research agents for stays, neighborhood, activities, food, weather, and optional flights
 3. normalizes and enriches activity/food source links and images
 4. curates the final `CurationOutput`
-5. saves JSON and renders a deterministic HTML travel book
+5. builds a deterministic presentation deck spec, selects a curated style preset, and renders a self-contained HTML travel book
 
 Notes:
 
 - Flights are optional and run only when `origin_airport` is provided.
-- Commute is meaningful when `target_destinations` are present.
 - Activity and food cards now expose `source_url` so users can click through in both JSON and HTML.
 - Partial failures degrade gracefully and write debug artifacts to `output/debug/`.
 
@@ -45,11 +43,10 @@ Notes:
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) with MCP Toolkit enabled
 - `MINIMAX_API_KEY`
 - `TAVILY_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
 
 Runtime integrations:
 
-- MCP: Airbnb, Tavily, OpenWeather, Google Maps
+- MCP: Airbnb, Tavily, OpenWeather
 - Direct Python tooling: `fast-flights[local]` + Playwright
 
 ## Setup
@@ -63,7 +60,6 @@ Fill in `.env` with at least:
 
 - `MINIMAX_API_KEY`
 - `TAVILY_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
 
 Install the local browser runtime used by flight search:
 
@@ -91,6 +87,14 @@ Outputs are written to `output/`:
 - `*.html` travel book
 - `output/debug/*.log` for failed agent runs
 
+## Validation
+
+Run the current unit suite with:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
 ## Scenario Fixtures
 
 The repo includes reusable end-to-end scenario files:
@@ -100,6 +104,11 @@ The repo includes reusable end-to-end scenario files:
 - `docs/scenarios/istanbul_workcation_roundtrip.json`
 - `docs/scenarios/denver_business_roundtrip.json`
 - `docs/scenarios/sydney_workcation_roundtrip.json`
+- `docs/scenarios/kyoto_romantic_roundtrip.json`
+- `docs/scenarios/marrakech_weekend_getaway_roundtrip.json`
+- `docs/scenarios/mexico_city_event_based_roundtrip.json`
+- `docs/scenarios/cape_town_family_roundtrip.json`
+- `docs/scenarios/buenos_aires_vacation_roundtrip.json`
 
 These are intended for repeatable regression runs without re-entering intake prompts.
 
@@ -119,6 +128,6 @@ These are intended for repeatable regression runs without re-entering intake pro
 | Package manager | uv |
 | Agent framework | PydanticAI |
 | Model provider | MiniMax M2.7 via Anthropic-compatible API |
-| MCP-backed tools | Airbnb, Tavily, OpenWeather, Google Maps |
+| MCP-backed tools | Airbnb, Tavily, OpenWeather |
 | Direct Python flight search | `fast-flights[local]` + Playwright |
-| HTML generation | Deterministic Python renderer |
+| HTML generation | Deterministic presentation system (`DeckSpec` + style presets + HTML renderer) |

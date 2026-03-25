@@ -1,6 +1,7 @@
+import re
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +26,6 @@ class IntakeOutput(BaseModel):
     check_out: str  # ISO date string, e.g. "2026-06-17"
     guests: int
     budget_per_night: float | None  # USD, None if not specified
-    target_destinations: list[str]  # addresses/places user needs to commute to
     time_preferences: str  # free text: how user wants to spend time
     origin_airport: str | None = None  # departure city or IATA code for flight search
 
@@ -35,6 +35,7 @@ class IntakeOutput(BaseModel):
 # ---------------------------------------------------------------------------
 
 class StayCandidate(BaseModel):
+    id: str
     name: str
     price_per_night: float | None
     total_price: float | None
@@ -43,6 +44,26 @@ class StayCandidate(BaseModel):
     amenities: list[str]
     location_description: str
     rating: float | None
+    latitude: float | None = None
+    longitude: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ensure_id(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if data.get("id"):
+            return data
+
+        url = data.get("url")
+        if isinstance(url, str):
+            match = re.search(r"/rooms/(\d+)", url)
+            if match:
+                return {**data, "id": match.group(1)}
+
+        name = str(data.get("name") or "stay").lower()
+        slug = re.sub(r"[^a-z0-9]+", "-", name).strip("-") or "stay"
+        return {**data, "id": slug}
 
 
 class StaysOutput(BaseModel):
@@ -105,23 +126,6 @@ class WeatherOutput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Commute
-# ---------------------------------------------------------------------------
-
-class CommuteOption(BaseModel):
-    origin: str
-    destination: str
-    mode: str  # "transit", "walking", "driving"
-    duration_minutes: int
-    summary: str  # human-readable route description
-
-
-class CommuteOutput(BaseModel):
-    options: list[CommuteOption]
-    map_url: str | None  # static map image URL from maps_static_map
-
-
-# ---------------------------------------------------------------------------
 # Flights
 # ---------------------------------------------------------------------------
 
@@ -155,6 +159,5 @@ class CurationOutput(BaseModel):
     weather: WeatherOutput | None = None
     activities: ActivitiesOutput | None = None
     food: FoodOutput | None = None
-    commute: CommuteOutput | None = None
     flights: FlightsOutput | None = None
     destination_vibe: str  # descriptor for slide theming, e.g. "coastal", "urban", "mountain"

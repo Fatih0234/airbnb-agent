@@ -13,7 +13,8 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from ..airbnb_images import enrich_stays_with_images
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
-from ..mcp_client import create_airbnb_mcp_server, create_google_maps_mcp_server
+from ..geocoding import geocode_destination_center
+from ..mcp_client import create_airbnb_mcp_server
 from ..schemas import IntakeOutput, StayCandidate, StaysOutput
 
 log = logging.getLogger("stays")
@@ -34,9 +35,6 @@ Instructions:
 @dataclass(frozen=True)
 class DestinationAnchor:
     destination: str
-    query: str
-    formatted_address: str | None
-    place_id: str | None
     latitude: float | None
     longitude: float | None
 
@@ -214,12 +212,14 @@ def _extract_coordinates(raw_listing: dict[str, Any]) -> tuple[float | None, flo
 
 
 def _candidate_from_search_result(raw_listing: dict[str, Any]) -> StayCandidate:
+    room_id = str(raw_listing.get("id") or _listing_id_from_url(raw_listing.get("url")) or "")
     name = (
         raw_listing.get("demandStayListing", {})
         .get("description", {})
         .get("name", {})
         .get("localizedStringWithTranslationPreference")
     ) or "Unknown Airbnb listing"
+    latitude, longitude = _extract_coordinates(raw_listing)
 
     structured_content = raw_listing.get("structuredContent", {})
     location_bits: list[str] = []
@@ -233,6 +233,7 @@ def _candidate_from_search_result(raw_listing: dict[str, Any]) -> StayCandidate:
         location_bits.append(str(badges))
 
     return StayCandidate(
+        id=room_id,
         name=name,
         price_per_night=_extract_price_per_night(raw_listing),
         total_price=_extract_total_price(raw_listing),
@@ -241,6 +242,8 @@ def _candidate_from_search_result(raw_listing: dict[str, Any]) -> StayCandidate:
         amenities=[],
         location_description=" | ".join(location_bits),
         rating=_extract_rating(raw_listing),
+        latitude=latitude,
+        longitude=longitude,
     )
 
 
@@ -254,7 +257,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _airbnb_location_query(intake: IntakeOutput, anchor: DestinationAnchor) -> str:
-    return intake.destination if anchor.place_id else _primary_destination_segment(intake.destination)
+    return intake.destination
 
 
 def _inspect_search_result(
@@ -356,44 +359,36 @@ def _reconcile_ranked_stays(
 async def _resolve_destination_anchor(intake: IntakeOutput) -> DestinationAnchor:
     default_anchor = DestinationAnchor(
         destination=intake.destination,
-        query=_primary_destination_segment(intake.destination),
-        formatted_address=None,
-        place_id=None,
         latitude=None,
         longitude=None,
     )
 
-    try:
-        result = await create_google_maps_mcp_server().direct_call_tool(
-            "maps_geocode",
-            {"address": intake.destination},
-        )
-    except Exception as exc:
-        log.warning("Destination geocode failed for '%s': %s", intake.destination, exc)
+    center = geocode_destination_center(intake.destination)
+    if center is None:
+        log.warning("Destination geocode failed for '%s'", intake.destination)
         return default_anchor
 
-    location = result.get("location", {}) if isinstance(result, dict) else {}
     anchor = DestinationAnchor(
         destination=intake.destination,
-        query=_primary_destination_segment(intake.destination),
-        formatted_address=result.get("formatted_address") if isinstance(result, dict) else None,
-        place_id=result.get("place_id") if isinstance(result, dict) else None,
-        latitude=_coerce_float(location.get("lat")),
-        longitude=_coerce_float(location.get("lng")),
+        latitude=center[0],
+        longitude=center[1],
     )
     log.info(
-        "Destination geocode resolved '%s' -> address=%s place_id=%s lat=%s lng=%s",
+        "Destination geocode resolved '%s' -> lat=%s lng=%s",
         intake.destination,
-        anchor.formatted_address or "n/a",
-        anchor.place_id or "n/a",
         f"{anchor.latitude:.6f}" if anchor.latitude is not None else "n/a",
         f"{anchor.longitude:.6f}" if anchor.longitude is not None else "n/a",
     )
     return anchor
 
 
-async def _search_airbnb(intake: IntakeOutput, anchor: DestinationAnchor) -> dict[str, Any]:
-    location_query = _airbnb_location_query(intake, anchor)
+async def _search_airbnb(
+    intake: IntakeOutput,
+    anchor: DestinationAnchor,
+    *,
+    location_override: str | None = None,
+) -> dict[str, Any]:
+    location_query = location_override or _airbnb_location_query(intake, anchor)
     args: dict[str, Any] = {
         "location": location_query,
         "adults": intake.guests,
@@ -403,14 +398,11 @@ async def _search_airbnb(intake: IntakeOutput, anchor: DestinationAnchor) -> dic
     }
     if intake.budget_per_night is not None:
         args["maxPrice"] = intake.budget_per_night
-    if anchor.place_id:
-        args["placeId"] = anchor.place_id
 
     log.info(
-        "Calling Airbnb search for '%s' with location='%s' placeId=%s",
+        "Calling Airbnb search for '%s' with location='%s'",
         intake.destination,
         location_query,
-        "yes" if anchor.place_id else "no",
     )
     return await create_airbnb_mcp_server().direct_call_tool("airbnb_search", args)
 
@@ -467,6 +459,19 @@ async def run_stays(intake: IntakeOutput) -> StaysOutput:
         return StaysOutput(stays=[])
 
     validated = _validated_search_results(raw_results, intake, anchor)
+    if not validated:
+        fallback_query = _primary_destination_segment(intake.destination)
+        if fallback_query and fallback_query != intake.destination:
+            log.warning(
+                "No validated Airbnb stays for '%s' using full destination; retrying with '%s'",
+                intake.destination,
+                fallback_query,
+            )
+            search_response = await _search_airbnb(intake, anchor, location_override=fallback_query)
+            raw_results = search_response.get("searchResults", []) if isinstance(search_response, dict) else []
+            if raw_results:
+                validated = _validated_search_results(raw_results, intake, anchor)
+
     if not validated:
         if anchor.latitude is not None and anchor.longitude is not None:
             log.warning(

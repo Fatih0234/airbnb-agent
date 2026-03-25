@@ -5,10 +5,6 @@
   "check_out": "2026-06-13",
   "guests": 1,
   "budget_per_night": 260,
-  "target_destinations": [
-    "Fira Barcelona Gran Via, Av. Joan Carles I, 64, L'Hospitalet de Llobregat",
-    "WeWork Glories, Luxa 79, Barcelona"
-  ],
-  "time_preferences": "Conference during the day, efficient commute, good tapas nearby, one rooftop dinner, and a couple of walkable evening sights after meetings.",
+  "time_preferences": "Conference during the day, good tapas nearby, one rooftop dinner, and a couple of walkable evening sights after meetings.",
   "origin_airport": "Amsterdam"
 }

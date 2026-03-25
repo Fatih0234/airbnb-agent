@@ -61,33 +61,26 @@ class StaysHelpersTest(unittest.TestCase):
             check_out="2026-06-13",
             guests=1,
             budget_per_night=260,
-            target_destinations=[],
             time_preferences="Conference during the day.",
             origin_airport="Amsterdam",
         )
         self.anchor = DestinationAnchor(
             destination=self.intake.destination,
-            query="Barcelona",
-            formatted_address="Barcelona, Spain",
-            place_id="ChIJ5TCOcRaYpBIRCmZHTz37sEQ",
             latitude=41.3874374,
             longitude=2.1686496,
         )
 
-    def test_airbnb_query_falls_back_to_primary_segment_without_place_id(self) -> None:
+    def test_airbnb_query_uses_full_destination_text(self) -> None:
         anchored = _airbnb_location_query(self.intake, self.anchor)
         self.assertEqual(anchored, "Barcelona, Spain")
 
-        no_place_id_anchor = DestinationAnchor(
+        no_coords_anchor = DestinationAnchor(
             destination=self.intake.destination,
-            query="Barcelona",
-            formatted_address=None,
-            place_id=None,
             latitude=None,
             longitude=None,
         )
-        fallback = _airbnb_location_query(self.intake, no_place_id_anchor)
-        self.assertEqual(fallback, "Barcelona")
+        fallback = _airbnb_location_query(self.intake, no_coords_anchor)
+        self.assertEqual(fallback, "Barcelona, Spain")
 
     def test_coordinate_validation_accepts_barcelona_and_rejects_vigo(self) -> None:
         barcelona_listing = _raw_listing(
@@ -110,6 +103,7 @@ class StaysHelpersTest(unittest.TestCase):
 
         self.assertTrue(accepted.accepted)
         self.assertEqual(accepted.reason, "within_radius")
+        self.assertEqual(accepted.candidate.id, "111")
         self.assertIsNotNone(accepted.distance_km)
         self.assertLessEqual(accepted.distance_km, DESTINATION_RADIUS_KM)
 
@@ -149,6 +143,7 @@ class StaysHelpersTest(unittest.TestCase):
             ListingInspection(
                 room_id="111",
                 candidate=StayCandidate(
+                    id="111",
                     name="Validated stay",
                     price_per_night=55,
                     total_price=220,
@@ -167,6 +162,7 @@ class StaysHelpersTest(unittest.TestCase):
         ]
         ranked = [
             StayCandidate(
+                id="999",
                 name="Invented stay",
                 price_per_night=10,
                 total_price=40,
@@ -177,6 +173,7 @@ class StaysHelpersTest(unittest.TestCase):
                 rating=5.0,
             ),
             StayCandidate(
+                id="111",
                 name="Validated stay",
                 price_per_night=55,
                 total_price=220,
@@ -190,6 +187,7 @@ class StaysHelpersTest(unittest.TestCase):
 
         reconciled = _reconcile_ranked_stays(ranked, validated)
         self.assertEqual(len(reconciled), 1)
+        self.assertEqual(reconciled[0].id, "111")
         self.assertEqual(reconciled[0].url, "https://www.airbnb.com/rooms/111")
 
 

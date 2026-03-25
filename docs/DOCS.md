@@ -14,7 +14,7 @@ Maintainer doc map for the current runtime, not the original build plan.
 The repo currently runs a terminal-first batch pipeline:
 
 1. collect or load `IntakeOutput`
-2. run research agents for stays, neighborhood, activities, food, weather, commute, and optional flights
+2. run research agents for stays, neighborhood, activities, food, weather, and optional flights
 3. normalize activity/food outputs and enrich them with deterministic metadata image scraping from `source_url`
 4. curate the final `CurationOutput`
 5. render deterministic HTML and save JSON/HTML to `output/`
@@ -27,6 +27,7 @@ Important current facts:
 - Stay images are scraped directly from Airbnb listing pages.
 - Activity and food images are best-effort metadata extracts from `source_url`.
 - Search-backed agent runs are serialized through `app/search_agent.py` to reduce rate-limit failures.
+- Destination geocoding for stay validation uses `geopy` + `Nominatim`, not Google.
 
 ## Repo Files That Matter
 
@@ -74,18 +75,8 @@ Current usage:
 Current usage:
 
 - `tavily-search` for research and airport-code lookup
-- `tavily-extract` only as a limited follow-up option in activities/food
-- default params: advanced search, `max_results=8`, `include_images=false`, `include_raw_content=false`
-
-### Google Maps MCP
-
-- Repo: https://github.com/cablate/mcp-google-map
-
-Current usage:
-
-- geocoding
-- commute directions and distance matrix
-- static map generation
+- `tavily-extract` only as a limited fallback option in activities/food
+- default params: advanced search, `max_results=5`, `include_images=false`, `include_raw_content=false`
 
 ### OpenWeather MCP
 
@@ -109,7 +100,6 @@ Known recurring issues:
 
 - some activity/food source pages return `403` or `404`, which reduces image fill but should not fail the run
 - concurrent runs can push flights into request-limit failures
-- some Google Maps place-type requests can fail on unsupported categories
 
 ## Practical Guidance
 

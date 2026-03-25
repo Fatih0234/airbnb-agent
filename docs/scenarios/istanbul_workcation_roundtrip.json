@@ -5,10 +5,6 @@
   "check_out": "2026-09-20",
   "guests": 1,
   "budget_per_night": 190,
-  "target_destinations": [
-    "Istanbul Congress Center, Darulbedai Caddesi No:3, Harbiye, Sisli, Istanbul",
-    "Impact Hub Istanbul, Incirli Dede Caddesi No:11, Sahkulu, Beyoglu, Istanbul"
-  ],
-  "time_preferences": "Work during the day with a reliable commute, then explore good meyhanes, strong Turkish breakfast spots, Bosphorus views, one rooftop dinner, and a couple of walkable historic evening sights.",
+  "time_preferences": "Work during the day, then explore good meyhanes, strong Turkish breakfast spots, Bosphorus views, one rooftop dinner, and a couple of walkable historic evening sights.",
   "origin_airport": "Munich"
 }

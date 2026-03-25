@@ -9,6 +9,8 @@ from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
 from ..mcp_client import create_tavily_mcp_server
 from ..schemas import ActivitiesOutput, IntakeOutput
 
+SEARCH_REQUEST_LIMIT = 5
+
 SYSTEM_PROMPT = """You are an activities research agent. Your job is to find activities
 that closely match how the user wants to spend their time.
 
@@ -16,8 +18,9 @@ Instructions:
 - Read the user's time_preferences carefully — these are the primary filter for what to find.
 - Make at most 2 tavily-search calls total for discovery.
 - Use tavily-search first to find strong candidates.
-- Use tavily-extract on at most 2 high-value URLs only if the search snippets are too thin to write
-  grounded descriptions.
+- Prefer writing from strong search snippets and source metadata instead of calling tavily-extract.
+- Use tavily-extract on at most 1 high-value URL only if the best candidates still cannot be described
+  accurately from the search results alone.
 - After those calls, immediately compile and return the results — do not search further.
 - For each activity, include `source_url` whenever possible.
 - Prefer the venue's official page as `source_url`; if that is not discoverable, use the best evidence page
@@ -57,6 +60,6 @@ async def run_activities(intake: IntakeOutput) -> ActivitiesOutput:
         result = await run_search_backed_agent(
             agent,
             _build_prompt(intake),
-            usage_limits=UsageLimits(request_limit=6),
+            usage_limits=UsageLimits(request_limit=SEARCH_REQUEST_LIMIT),
         )
     return result.output
