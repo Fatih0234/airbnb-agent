@@ -17,21 +17,8 @@ def get_minimax_api_key() -> str:
     return key
 
 
-def get_model_name() -> str:
-    return os.getenv("MODEL_NAME", "MiniMax-M2.7")
-
-
 def get_fast_model_name() -> str:
     return os.getenv("FAST_MODEL_NAME", "MiniMax-M2.7")
-
-
-def get_google_maps_api_key() -> str:
-    key = os.getenv("GOOGLE_MAPS_API_KEY")
-    if not key:
-        raise SystemExit(
-            "Missing GOOGLE_MAPS_API_KEY. Copy .env.example to .env and add your key."
-        )
-    return key
 
 
 def get_tavily_api_key() -> str:
@@ -41,11 +28,3 @@ def get_tavily_api_key() -> str:
             "Missing TAVILY_API_KEY. Copy .env.example to .env and add your key."
         )
     return key
-
-
-def get_curation_timeout_seconds() -> float:
-    return float(os.getenv("CURATION_TIMEOUT_SECONDS", "180"))
-
-
-def get_slides_timeout_seconds() -> float:
-    return float(os.getenv("SLIDES_TIMEOUT_SECONDS", "240"))
