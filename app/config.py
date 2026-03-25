@@ -28,3 +28,12 @@ def get_tavily_api_key() -> str:
             "Missing TAVILY_API_KEY. Copy .env.example to .env and add your key."
         )
     return key
+
+
+def get_open_weather_api_key() -> str:
+    key = os.getenv("OPEN_WEATHER_API_KEY")
+    if not key:
+        raise SystemExit(
+            "Missing OPEN_WEATHER_API_KEY. Copy .env.example to .env and add your key."
+        )
+    return key

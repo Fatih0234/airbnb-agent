@@ -1,50 +1,61 @@
-from pydantic_ai import Agent
-from pydantic_ai.usage import UsageLimits
+import json
 import anthropic
+from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.usage import UsageLimits
 
-from ..search_agent import run_search_backed_agent
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
-from ..mcp_client import create_tavily_mcp_server
+from ..food_search import MODEL_CANDIDATE_LIMIT, collect_food_candidates
 from ..schemas import FoodOutput, IntakeOutput
 
-SEARCH_REQUEST_LIMIT = 5
+MODEL_REQUEST_LIMIT = 3
+SEARCH_REQUEST_LIMIT = MODEL_REQUEST_LIMIT
 
-SYSTEM_PROMPT = """You are a food research agent. Your job is to find the best restaurants,
-cafes, and food experiences for the traveler.
+SYSTEM_PROMPT = """You are a food ranking agent. Your job is to select the best restaurants,
+cafes, and food experiences from a precomputed candidate list.
 
 Instructions:
-- Make at most 2 tavily-search calls total for discovery.
-- Use tavily-search first to find strong candidates.
-- Prefer writing from strong search snippets and source metadata instead of calling tavily-extract.
-- Use tavily-extract on at most 1 high-value URL only if the best candidates still cannot be described
-  accurately from the search results alone.
-- After those calls, immediately compile and return the results — do not search further.
-- For each pick, include `source_url` whenever possible.
-- Prefer the venue's official page as `source_url`; if that is not discoverable, use the best evidence page
-  you actually found in search results.
-- Never invent a `source_url` or `image_url`.
-- Leave `image_url` null unless a trustworthy image URL is directly present in the tool results.
-- Factor in trip type: business trips need convenient options near likely office areas;
-  romantic trips need ambiance; family trips need kid-friendly options.
-- Also consider any food preferences mentioned in time_preferences.
-- Curate 6–8 picks covering a range of cuisines, price ranges, and meal types.
+- Use only the provided food candidates. Do not search or invent additional options.
+- Curate a focused list of 6–8 picks when enough candidates are available.
+- Match the trip brief: business trips need convenience, romantic trips need ambiance,
+  family trips need kid-friendly range, and time_preferences should shape the mix.
+- Never invent or replace `source_url` or `image_url`; preserve them only from provided candidates.
+- You may refine descriptions for clarity and keep cuisine_type/price_range aligned with the supplied evidence.
 - Include price range ($, $$, $$$), cuisine type, and description for each.
 - Return a structured FoodOutput.
 """
 
 
-def _build_prompt(intake: IntakeOutput) -> str:
+def _build_prompt(
+    intake: IntakeOutput,
+    *,
+    candidates: list[dict[str, object]],
+    search_metadata: dict[str, object],
+) -> str:
     return (
-        f"Find the best restaurants and food experiences in {intake.destination}. "
-        f"Trip type: {intake.trip_type}. "
-        f"User preferences: \"{intake.time_preferences}\". "
-        f"Guests: {intake.guests}."
+        f"Rank the provided food candidates for a trip to {intake.destination}.\n\n"
+        f"Trip context:\n"
+        f"- trip type: {intake.trip_type}\n"
+        f"- dates: {intake.check_in} to {intake.check_out}\n"
+        f"- guests: {intake.guests}\n"
+        f"- time preferences: {intake.time_preferences}\n\n"
+        f"Search metadata:\n{json.dumps(search_metadata, indent=2)}\n\n"
+        f"Candidate food picks:\n{json.dumps(candidates, indent=2)}"
     )
 
 
 async def run_food(intake: IntakeOutput) -> FoodOutput:
+    candidates, search_metadata = await collect_food_candidates(
+        destination=intake.destination,
+        trip_type=intake.trip_type,
+        time_preferences=intake.time_preferences,
+        limit=MODEL_CANDIDATE_LIMIT,
+    )
+
+    if not candidates:
+        return FoodOutput(picks=[])
+
     model = AnthropicModel(
         get_fast_model_name(),
         provider=AnthropicProvider(anthropic_client=anthropic.AsyncAnthropic(
@@ -53,15 +64,20 @@ async def run_food(intake: IntakeOutput) -> FoodOutput:
     )
     agent = Agent(
         model,
-        toolsets=[create_tavily_mcp_server()],
         output_type=FoodOutput,
         system_prompt=SYSTEM_PROMPT,
         max_concurrency=1,
     )
     async with agent:
-        result = await run_search_backed_agent(
-            agent,
-            _build_prompt(intake),
-            usage_limits=UsageLimits(request_limit=SEARCH_REQUEST_LIMIT),
+        result = await agent.run(
+            _build_prompt(
+                intake,
+                candidates=candidates,
+                search_metadata={
+                    **search_metadata,
+                    "candidate_count": len(candidates),
+                },
+            ),
+            usage_limits=UsageLimits(request_limit=MODEL_REQUEST_LIMIT),
         )
     return result.output
