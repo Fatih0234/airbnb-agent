@@ -1,11 +1,20 @@
-"""Scrape listing photo URLs directly from the Airbnb listing page.
+"""Scrape listing photo URLs from Airbnb listing pages.
 
-Airbnb embeds photo URLs in the page HTML under the pattern:
-  a0.muscache.com/im/pictures/…/Hosting-{listing_id}/original/{uuid}.jpeg
+Airbnb embeds photo URLs in two places:
+  1. Inside <script id="data-deferred-state-0"> as JSON (primary, reliable)
+  2. Inline in HTML attributes (fallback, less reliable)
 
-The MCP tool (openbnb-airbnb) does not expose these, so we fetch them ourselves.
+CDN URL patterns seen:
+  - a0.muscache.com/im/pictures/{uuid}.jpg                  (old-style)
+  - a0.muscache.com/im/pictures/hosting/Hosting-{id}/…/{uuid}.jpeg (new-style)
+  - a0.muscache.com/im/pictures/miso/Hosting-{id}/…/{uuid}.jpeg    (variant)
+
+The search results may already have images from contextualPictures —
+enrich_stays_with_images only fetches per-listing images when needed.
 """
+
 import asyncio
+import json
 import logging
 import re
 
@@ -23,10 +32,44 @@ _HEADERS = {
 }
 _MAX_PHOTOS = 6
 
+# Broad pattern that catches all known CDN URL formats (old, hosting/, miso/, etc.)
+_MUSCACHE_IMAGE_RE = re.compile(
+    r"https://a0\.muscache\.com/im/pictures/"
+    r"[^\s\"'\\>]+\.(?:jpeg|jpg|webp|png)"
+)
+
 
 def _listing_id(url: str) -> str | None:
     m = re.search(r"/rooms/(\d+)", url)
     return m.group(1) if m else None
+
+
+def _extract_images_from_json(json_text: str, listing_id: str) -> list[str]:
+    """Find all muscache image URLs inside the deferred-state JSON string."""
+    seen: set[str] = set()
+    photos: list[str] = []
+    for m in _MUSCACHE_IMAGE_RE.finditer(json_text):
+        url = m.group(0)
+        if url not in seen:
+            seen.add(url)
+            photos.append(url)
+        if len(photos) >= _MAX_PHOTOS:
+            break
+    return photos
+
+
+def _extract_images_from_html(html: str, listing_id: str) -> list[str]:
+    """Fallback: find muscache image URLs directly in raw HTML."""
+    seen: set[str] = set()
+    photos: list[str] = []
+    for m in _MUSCACHE_IMAGE_RE.finditer(html):
+        url = m.group(0)
+        if url not in seen:
+            seen.add(url)
+            photos.append(url)
+        if len(photos) >= _MAX_PHOTOS:
+            break
+    return photos
 
 
 async def fetch_listing_images(listing_url: str) -> list[str]:
@@ -36,43 +79,35 @@ async def fetch_listing_images(listing_url: str) -> list[str]:
         return []
 
     try:
-        async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True, timeout=15) as client:
+        async with httpx.AsyncClient(
+            headers=_HEADERS, follow_redirects=True, timeout=15
+        ) as client:
             r = await client.get(listing_url)
             r.raise_for_status()
     except Exception as exc:
         log.warning("Could not fetch Airbnb page %s: %s", listing_url, exc)
         return []
 
-    seen: set[str] = set()
+    html = r.text
     photos: list[str] = []
 
-    # New-style listings: Hosting-{id}/original/{uuid}.ext
-    new_pattern = re.compile(
-        rf"https://a0\.muscache\.com/im/pictures/[^\"\\]+Hosting-{listing_id}/original/[^\"\\?]+"
-        r"\.(?:jpeg|jpg|webp|png)"
+    # Strategy 1: Parse deferred-state JSON (most reliable)
+    match = re.search(
+        r'<script\s+id="data-deferred-state-0"[^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
     )
-    for m in new_pattern.finditer(r.text):
-        url = m.group(0)
-        if url not in seen:
-            seen.add(url)
-            photos.append(url)
-        if len(photos) >= _MAX_PHOTOS:
-            break
+    if match:
+        try:
+            json_text = match.group(1)
+            json.loads(json_text)  # validate it's real JSON
+            photos = _extract_images_from_json(json_text, listing_id)
+        except (json.JSONDecodeError, Exception) as exc:
+            log.debug("JSON parse failed for listing %s: %s", listing_id, exc)
 
-    # Old-style listings: flat {uuid}.jpg (no subdirectory)
+    # Strategy 2: Regex on full HTML (catches images in inline attributes)
     if not photos:
-        old_pattern = re.compile(
-            r"https://a0\.muscache\.com/im/pictures/"
-            r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})"
-            r"\.(?:jpeg|jpg|webp|png)"
-        )
-        for m in old_pattern.finditer(r.text):
-            url = m.group(0)
-            if url not in seen:
-                seen.add(url)
-                photos.append(url)
-            if len(photos) >= _MAX_PHOTOS:
-                break
+        photos = _extract_images_from_html(html, listing_id)
 
     log.info("Scraped %d photos for listing %s", len(photos), listing_id)
     return photos

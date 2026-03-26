@@ -12,9 +12,10 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from ..airbnb_images import enrich_stays_with_images
+from ..airbnb_search import search_airbnb
 from ..config import MINIMAX_BASE_URL, get_fast_model_name, get_minimax_api_key
+from ..exceptions import NoResultsError, RateLimitError
 from ..geocoding import geocode_destination_center
-from ..mcp_client import create_airbnb_mcp_server
 from ..schemas import IntakeOutput, StayCandidate, StaysOutput
 
 log = logging.getLogger("stays")
@@ -62,16 +63,24 @@ def _create_model() -> AnthropicModel:
     )
 
 
-def _build_ranking_prompt(intake: IntakeOutput, validated: list[ListingInspection]) -> str:
+def _build_ranking_prompt(
+    intake: IntakeOutput, validated: list[ListingInspection]
+) -> str:
     payload = [
         {
             "room_id": inspection.room_id,
-            "distance_km": round(inspection.distance_km, 2) if inspection.distance_km is not None else None,
+            "distance_km": round(inspection.distance_km, 2)
+            if inspection.distance_km is not None
+            else None,
             "candidate": inspection.candidate.model_dump(),
         }
         for inspection in validated
     ]
-    budget_str = f"${intake.budget_per_night}/night max" if intake.budget_per_night else "no fixed budget"
+    budget_str = (
+        f"${intake.budget_per_night}/night max"
+        if intake.budget_per_night
+        else "no fixed budget"
+    )
     return (
         f"Choose up to 5 best-value Airbnb stays for a {intake.trip_type} trip to {intake.destination} "
         f"from {intake.check_in} to {intake.check_out} for {intake.guests} guest(s), {budget_str}. "
@@ -98,14 +107,18 @@ def _destination_matchers(destination: str) -> list[tuple[str, list[str]]]:
         normalized = _normalize_text(segment)
         if not normalized:
             continue
-        words = [word for word in re.findall(r"[a-z0-9]+", normalized) if len(word) >= 4]
+        words = [
+            word for word in re.findall(r"[a-z0-9]+", normalized) if len(word) >= 4
+        ]
         if not words:
             continue
         matchers.append((normalized, words))
 
     if not matchers:
         normalized = _normalize_text(destination)
-        words = [word for word in re.findall(r"[a-z0-9]+", normalized) if len(word) >= 4]
+        words = [
+            word for word in re.findall(r"[a-z0-9]+", normalized) if len(word) >= 4
+        ]
         if normalized and words:
             matchers.append((normalized, words))
     return matchers
@@ -113,7 +126,11 @@ def _destination_matchers(destination: str) -> list[tuple[str, list[str]]]:
 
 def _stay_matches_destination(stay: StayCandidate, intake: IntakeOutput) -> bool:
     haystack = _normalize_text(
-        " ".join(part for part in [stay.name, stay.location_description, stay.url or ""] if part)
+        " ".join(
+            part
+            for part in [stay.name, stay.location_description, stay.url or ""]
+            if part
+        )
     )
     for phrase, words in _destination_matchers(intake.destination):
         if phrase and phrase in haystack:
@@ -191,6 +208,10 @@ def _extract_price_per_night(raw_listing: dict[str, Any]) -> float | None:
     if not details:
         return None
 
+    # priceDetails is a flattened string like "5 nights x € 68.39: € 341.93"
+    if not isinstance(details, str):
+        details = str(details)
+
     match = re.search(r"x\s*[^\d]*([\d.,]+)", details)
     if match:
         return _parse_localized_amount(match.group(1))
@@ -206,13 +227,23 @@ def _extract_rating(raw_listing: dict[str, Any]) -> float | None:
     return float(match.group(1)) if match else None
 
 
-def _extract_coordinates(raw_listing: dict[str, Any]) -> tuple[float | None, float | None]:
-    coordinate = raw_listing.get("demandStayListing", {}).get("location", {}).get("coordinate", {})
-    return _coerce_float(coordinate.get("latitude")), _coerce_float(coordinate.get("longitude"))
+def _extract_coordinates(
+    raw_listing: dict[str, Any],
+) -> tuple[float | None, float | None]:
+    coordinate = (
+        raw_listing.get("demandStayListing", {})
+        .get("location", {})
+        .get("coordinate", {})
+    )
+    return _coerce_float(coordinate.get("latitude")), _coerce_float(
+        coordinate.get("longitude")
+    )
 
 
 def _candidate_from_search_result(raw_listing: dict[str, Any]) -> StayCandidate:
-    room_id = str(raw_listing.get("id") or _listing_id_from_url(raw_listing.get("url")) or "")
+    room_id = str(
+        raw_listing.get("id") or _listing_id_from_url(raw_listing.get("url")) or ""
+    )
     name = (
         raw_listing.get("demandStayListing", {})
         .get("description", {})
@@ -238,7 +269,7 @@ def _candidate_from_search_result(raw_listing: dict[str, Any]) -> StayCandidate:
         price_per_night=_extract_price_per_night(raw_listing),
         total_price=_extract_total_price(raw_listing),
         url=raw_listing.get("url"),
-        image_urls=[],
+        image_urls=raw_listing.get("image_urls", []),
         amenities=[],
         location_description=" | ".join(location_bits),
         rating=_extract_rating(raw_listing),
@@ -275,7 +306,9 @@ def _inspect_search_result(
         and anchor.latitude is not None
         and anchor.longitude is not None
     ):
-        distance_km = _haversine_km(anchor.latitude, anchor.longitude, latitude, longitude)
+        distance_km = _haversine_km(
+            anchor.latitude, anchor.longitude, latitude, longitude
+        )
         accepted = distance_km <= DESTINATION_RADIUS_KM
         return ListingInspection(
             room_id=room_id,
@@ -287,6 +320,20 @@ def _inspect_search_result(
             reason="within_radius" if accepted else "outside_radius",
         )
 
+    # If listing has no coordinates (from scraper), accept it since Airbnb
+    # already filtered by location in the search
+    if latitude is None or longitude is None:
+        return ListingInspection(
+            room_id=room_id,
+            candidate=candidate,
+            latitude=latitude,
+            longitude=longitude,
+            distance_km=None,
+            accepted=True,
+            reason="no_coords_airbnb_search",
+        )
+
+    # Otherwise try text matching
     accepted = _stay_matches_destination(candidate, intake)
     return ListingInspection(
         room_id=room_id,
@@ -299,14 +346,18 @@ def _inspect_search_result(
     )
 
 
-def _log_dropped_results(dropped: list[ListingInspection], intake: IntakeOutput) -> None:
+def _log_dropped_results(
+    dropped: list[ListingInspection], intake: IntakeOutput
+) -> None:
     if not dropped:
         return
 
     sample: list[str] = []
     for inspection in dropped[:5]:
         if inspection.distance_km is not None:
-            sample.append(f"{inspection.room_id or 'unknown'}({inspection.distance_km:.1f}km)")
+            sample.append(
+                f"{inspection.room_id or 'unknown'}({inspection.distance_km:.1f}km)"
+            )
         else:
             sample.append(f"{inspection.room_id or 'unknown'}({inspection.reason})")
 
@@ -328,9 +379,7 @@ def _reconcile_ranked_stays(
         if (normalized_url := _normalize_listing_url(inspection.candidate.url))
     }
     by_room_id = {
-        inspection.room_id: inspection
-        for inspection in validated
-        if inspection.room_id
+        inspection.room_id: inspection for inspection in validated if inspection.room_id
     }
 
     reconciled: list[StayCandidate] = []
@@ -388,23 +437,48 @@ async def _search_airbnb(
     *,
     location_override: str | None = None,
 ) -> dict[str, Any]:
+    """Search Airbnb via HTTP (mirrors MCP server approach).
+
+    Returns results in MCP-compatible format.
+    """
     location_query = location_override or _airbnb_location_query(intake, anchor)
-    args: dict[str, Any] = {
-        "location": location_query,
-        "adults": intake.guests,
-        "checkin": intake.check_in,
-        "checkout": intake.check_out,
-        "ignoreRobotsText": True,
-    }
-    if intake.budget_per_night is not None:
-        args["maxPrice"] = intake.budget_per_night
 
     log.info(
-        "Calling Airbnb search for '%s' with location='%s'",
+        "Searching Airbnb for '%s' (location='%s')",
         intake.destination,
         location_query,
     )
-    return await create_airbnb_mcp_server().direct_call_tool("airbnb_search", args)
+
+    try:
+        result = await search_airbnb(
+            location=location_query,
+            checkin=intake.check_in,
+            checkout=intake.check_out,
+            adults=intake.guests,
+            max_price=int(intake.budget_per_night) if intake.budget_per_night else None,
+        )
+
+        log.info(
+            "Airbnb search completed: %d listings for '%s'",
+            len(result.listings),
+            intake.destination,
+        )
+
+        return {
+            "searchResults": result.listings,
+            "searchUrl": result.search_url,
+            "totalFound": result.total_found,
+        }
+
+    except NoResultsError as e:
+        log.info("No results found for '%s': %s", intake.destination, e)
+        return {"searchResults": []}
+    except RateLimitError as e:
+        log.error("Rate limited for '%s': %s", intake.destination, e)
+        return {"searchResults": []}
+    except Exception as e:
+        log.error("Airbnb search failed for '%s': %s", intake.destination, e)
+        return {"searchResults": []}
 
 
 def _validated_search_results(
@@ -412,7 +486,10 @@ def _validated_search_results(
     intake: IntakeOutput,
     anchor: DestinationAnchor,
 ) -> list[ListingInspection]:
-    inspections = [_inspect_search_result(raw_listing, intake, anchor) for raw_listing in raw_results]
+    inspections = [
+        _inspect_search_result(raw_listing, intake, anchor)
+        for raw_listing in raw_results
+    ]
     accepted = [inspection for inspection in inspections if inspection.accepted]
     dropped = [inspection for inspection in inspections if not inspection.accepted]
 
@@ -452,10 +529,17 @@ async def run_stays(intake: IntakeOutput) -> StaysOutput:
     model = _create_model()
     anchor = await _resolve_destination_anchor(intake)
     search_response = await _search_airbnb(intake, anchor)
-    raw_results = search_response.get("searchResults", []) if isinstance(search_response, dict) else []
+    raw_results = (
+        search_response.get("searchResults", [])
+        if isinstance(search_response, dict)
+        else []
+    )
 
     if not raw_results:
-        log.warning("Airbnb search returned zero raw results for '%s'; returning empty stays", intake.destination)
+        log.warning(
+            "Airbnb search returned zero raw results for '%s'; returning empty stays",
+            intake.destination,
+        )
         return StaysOutput(stays=[])
 
     validated = _validated_search_results(raw_results, intake, anchor)
@@ -467,8 +551,14 @@ async def run_stays(intake: IntakeOutput) -> StaysOutput:
                 intake.destination,
                 fallback_query,
             )
-            search_response = await _search_airbnb(intake, anchor, location_override=fallback_query)
-            raw_results = search_response.get("searchResults", []) if isinstance(search_response, dict) else []
+            search_response = await _search_airbnb(
+                intake, anchor, location_override=fallback_query
+            )
+            raw_results = (
+                search_response.get("searchResults", [])
+                if isinstance(search_response, dict)
+                else []
+            )
             if raw_results:
                 validated = _validated_search_results(raw_results, intake, anchor)
 
